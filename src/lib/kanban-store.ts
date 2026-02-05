@@ -36,13 +36,20 @@ export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-export function createTask(title: string, description?: string, priority: Task['priority'] = 'medium'): Task {
+export function createTask(
+  title: string,
+  status: Task['status'],
+  description?: string,
+  priority: Task['priority'] = 'medium',
+  tags?: string[]
+): Task {
   const now = new Date().toISOString();
-  return { id: generateId(), title, description, priority, createdAt: now, updatedAt: now };
+  return { id: generateId(), title, description, status, priority, tags, createdAt: now, updatedAt: now };
 }
 
 export function createActivity(action: string, taskTitle: string, from?: string, to?: string): ActivityItem {
-  return { id: generateId(), action, taskTitle, from, to, timestamp: new Date().toISOString() };
+  const details = from && to ? `${from} → ${to}` : undefined;
+  return { id: generateId(), action, taskTitle, details, timestamp: new Date().toISOString() };
 }
 
 export function formatTimestamp(iso: string): string {

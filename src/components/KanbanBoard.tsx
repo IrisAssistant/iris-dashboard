@@ -1,83 +1,118 @@
-'use client';
-
+﻿'use client';
 import { useState, useEffect } from 'react';
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, closestCorners } from '@dnd-kit/core';
-import { KanbanState, Task, Column } from '@/types/kanban';
-import { loadState, saveState, createTask, createActivity } from '@/lib/kanban-store';
+import { DndContext, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
+import { Task, TaskStatus, COLUMNS, ActivityItem } from '@/types/kanban';
+import { getTasks, saveTasks, getActivity, addActivity, clearActivity } from '@/lib/storage';
+import { KanbanColumn } from './KanbanColumn';
+import { KanbanCard } from './KanbanCard';
+import { ActivityLog } from './ActivityLog';
+import { AddTaskModal } from './AddTaskModal';
 
 export function KanbanBoard() {
-  const [state, setState] = useState<KanbanState | null>(null);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalDefaultStatus, setModalDefaultStatus] = useState<TaskStatus>('backlog');
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  useEffect(() => { setState(loadState()); }, []);
-  useEffect(() => { if (state) saveState(state); }, [state]);
+  useEffect(() => { setTasks(getTasks()); setActivities(getActivity()); setIsLoaded(true); }, []);
+  useEffect(() => { if (isLoaded) saveTasks(tasks); }, [tasks, isLoaded]);
 
-  if (!state) return <div className="text-gray-500">Loading...</div>;
+  const handleDragStart = (event: DragStartEvent) => { const task = tasks.find((t) => t.id === event.active.id); if (task) setActiveTask(task); };
 
-  const handleAddTask = (columnId: string) => {
-    if (!newTaskTitle.trim()) return;
-    const task = createTask(newTaskTitle);
-    const activity = createActivity('created', newTaskTitle);
-    setState(prev => {
-      if (!prev) return prev;
-      const colIndex = prev.columns.findIndex(c => c.id === columnId);
-      const newColumns = [...prev.columns];
-      newColumns[colIndex] = { ...newColumns[colIndex], tasks: [task, ...newColumns[colIndex].tasks] };
-      return { columns: newColumns, activity: [activity, ...prev.activity].slice(0, 100) };
-    });
-    setNewTaskTitle('');
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const activeTask = tasks.find((t) => t.id === active.id);
+    if (!activeTask) return;
+    const overColumn = COLUMNS.find((c) => c.id === over.id);
+    if (overColumn && activeTask.status !== overColumn.id) {
+      setTasks((prev) => prev.map((t) => t.id === active.id ? { ...t, status: overColumn.id, updatedAt: new Date().toISOString() } : t));
+      return;
+    }
+    const overTask = tasks.find((t) => t.id === over.id);
+    if (overTask && activeTask.status !== overTask.status) {
+      setTasks((prev) => prev.map((t) => t.id === active.id ? { ...t, status: overTask.status, updatedAt: new Date().toISOString() } : t));
+    }
   };
 
-  const handleDeleteTask = (taskId: string, taskTitle: string) => {
-    const activity = createActivity('deleted', taskTitle);
-    setState(prev => {
-      if (!prev) return prev;
-      const newColumns = prev.columns.map(col => ({ ...col, tasks: col.tasks.filter(t => t.id !== taskId) }));
-      return { columns: newColumns, activity: [activity, ...prev.activity].slice(0, 100) };
-    });
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    const draggingTask = activeTask ?? tasks.find((t) => t.id === active.id);
+    setActiveTask(null);
+    if (!over || !draggingTask) return;
+    const overColumn = COLUMNS.find((c) => c.id === over.id);
+    if (overColumn && draggingTask.status !== overColumn.id) {
+      const fromColumn = COLUMNS.find((c) => c.id === draggingTask.status);
+      logActivity('Moved', draggingTask.title, fromColumn?.title + ' -> ' + overColumn.title);
+      return;
+    }
+    const overTask = tasks.find((t) => t.id === over.id);
+    if (overTask) {
+      if (draggingTask.status === overTask.status) {
+        const columnTasks = tasks.filter((t) => t.status === draggingTask.status);
+        const oldIndex = columnTasks.findIndex((t) => t.id === active.id);
+        const newIndex = columnTasks.findIndex((t) => t.id === over.id);
+        if (oldIndex !== newIndex) {
+          const reordered = arrayMove(columnTasks, oldIndex, newIndex);
+          setTasks((prev) => [...prev.filter((t) => t.status !== draggingTask.status), ...reordered]);
+        }
+      } else {
+        const fromColumn = COLUMNS.find((c) => c.id === draggingTask.status);
+        const toColumn = COLUMNS.find((c) => c.id === overTask.status);
+        if (toColumn) {
+          logActivity('Moved', draggingTask.title, fromColumn?.title + ' -> ' + toColumn.title);
+        }
+      }
+    }
   };
+
+  const logActivity = (action: string, taskTitle: string, details?: string) => { addActivity({ action, taskTitle, details }); setActivities(getActivity()); };
+  const handleAddTask = (status: TaskStatus) => { setModalDefaultStatus(status); setIsModalOpen(true); };
+  const handleCreateTask = (taskData: { title: string; description: string; status: TaskStatus; priority: 'low' | 'medium' | 'high'; tags: string[] }) => {
+    const newTask: Task = { id: crypto.randomUUID(), ...taskData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    setTasks((prev) => [...prev, newTask]);
+    logActivity('Created', newTask.title);
+  };
+  const handleDeleteTask = (id: string) => { const task = tasks.find((t) => t.id === id); if (task) { setTasks((prev) => prev.filter((t) => t.id !== id)); logActivity('Deleted', task.title); } };
+  const handleClearActivity = () => { clearActivity(); setActivities([]); };
+  const getTasksByStatus = (status: TaskStatus) => tasks.filter((t) => t.status === status);
+
+  if (!isLoaded) return <div className="flex items-center justify-center h-screen bg-zinc-950"><div className="text-zinc-500">Loading...</div></div>;
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCorners}>
-      <div className="flex gap-4">
-        {state.columns.map(column => (
-          <div key={column.id} className="w-72 bg-zinc-900 rounded-lg p-4">
-            <h2 className="font-bold text-white mb-3">{column.title} ({column.tasks.length})</h2>
-            <div className="flex gap-2 mb-3">
-              <input
-                type="text"
-                value={newTaskTitle}
-                onChange={e => setNewTaskTitle(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAddTask(column.id)}
-                placeholder="New task..."
-                className="flex-1 px-2 py-1 bg-zinc-800 rounded text-sm text-white"
-              />
-              <button onClick={() => handleAddTask(column.id)} className="px-2 py-1 bg-green-600 rounded text-sm text-white">+</button>
+    <div className="flex h-screen bg-zinc-950">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="px-6 py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔮</span>
+            <div>
+              <h1 className="text-xl font-bold text-zinc-100">Iris Dashboard</h1>
+              <p className="text-sm text-zinc-500">Kanban task tracking</p>
             </div>
-            <div className="space-y-2">
-              {column.tasks.map(task => (
-                <div key={task.id} className="bg-zinc-800 p-3 rounded group">
-                  <div className="flex justify-between items-start">
-                    <span className="text-white text-sm">{task.title}</span>
-                    <button onClick={() => handleDeleteTask(task.id, task.title)} className="text-red-400 text-xs opacity-0 group-hover:opacity-100">x</button>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded ${task.priority === 'high' ? 'bg-red-500/30 text-red-400' : task.priority === 'medium' ? 'bg-yellow-500/30 text-yellow-400' : 'bg-blue-500/30 text-blue-400'}`}>{task.priority}</span>
+          </div>
+        </header>
+        <main className="flex-1 overflow-x-auto p-6">
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+            <div className="flex gap-4 h-full">
+              {COLUMNS.map((column) => (<KanbanColumn key={column.id} column={column} tasks={getTasksByStatus(column.id)} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} />))}
+            </div>
+            <DragOverlay>
+              {activeTask ? (
+                <div className="rotate-3">
+                  <KanbanCard task={activeTask} onDelete={() => {}} isOverlay />
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
-        <div className="w-72 bg-zinc-900/50 rounded-lg p-4">
-          <h2 className="font-bold text-white mb-3">Activity</h2>
-          <div className="space-y-2 text-xs text-gray-400">
-            {state.activity.slice(0, 20).map(a => (
-              <div key={a.id}>{a.taskTitle} {a.action}</div>
-            ))}
-          </div>
-        </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </main>
       </div>
-    </DndContext>
+      <ActivityLog activities={activities} onClear={handleClearActivity} />
+      <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />
+    </div>
   );
 }

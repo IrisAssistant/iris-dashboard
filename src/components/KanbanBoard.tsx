@@ -1,9 +1,9 @@
 ﻿'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DndContext, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Task, TaskStatus, COLUMNS, ActivityItem } from '@/types/kanban';
-import { getTasks, saveTasks, getActivity, addActivity, clearActivity } from '@/lib/storage';
+import { getTasks, saveTasks, getActivity, addActivity, clearActivity, initializeStorage, subscribeToTasks, subscribeToActivity } from '@/lib/storage';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { ActivityLog } from './ActivityLog';
@@ -16,11 +16,45 @@ export function KanbanBoard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalDefaultStatus, setModalDefaultStatus] = useState<TaskStatus>('backlog');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  useEffect(() => { setTasks(getTasks()); setActivities(getActivity()); setIsLoaded(true); }, []);
-  useEffect(() => { if (isLoaded) saveTasks(tasks); }, [tasks, isLoaded]);
+  // Initialize Firestore and subscribe to updates
+  useEffect(() => {
+    let unsubTasks: (() => void) | undefined;
+    let unsubActivity: (() => void) | undefined;
+    
+    async function init() {
+      await initializeStorage();
+      setTasks(getTasks());
+      setActivities(getActivity());
+      setIsLoaded(true);
+      
+      // Subscribe to real-time updates from other clients
+      unsubTasks = subscribeToTasks((newTasks) => {
+        if (!isSaving) setTasks(newTasks);
+      });
+      unsubActivity = subscribeToActivity((newActivity) => {
+        setActivities(newActivity);
+      });
+    }
+    
+    init();
+    
+    return () => {
+      unsubTasks?.();
+      unsubActivity?.();
+    };
+  }, []);
+  
+  // Save tasks to Firestore when they change
+  useEffect(() => {
+    if (isLoaded && !isSaving) {
+      setIsSaving(true);
+      saveTasks(tasks).finally(() => setIsSaving(false));
+    }
+  }, [tasks, isLoaded]);
 
   const handleDragStart = (event: DragStartEvent) => { const task = tasks.find((t) => t.id === event.active.id); if (task) setActiveTask(task); };
 

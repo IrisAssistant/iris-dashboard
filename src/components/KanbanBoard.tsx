@@ -1,9 +1,9 @@
-﻿'use client';
+'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { DndContext, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Task, TaskStatus, COLUMNS, ActivityItem } from '@/types/kanban';
-import { getTasks, saveTasks, getActivity, addActivity, clearActivity, initializeStorage, subscribeToTasks, subscribeToActivity } from '@/lib/storage';
+import { getTasks, saveTasks, getActivity, addActivity, clearActivity, initializeStorage, subscribeToTasks, subscribeToActivity, subscribeToErrors } from '@/lib/storage';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { ActivityLog } from './ActivityLog';
@@ -17,6 +17,7 @@ export function KanbanBoard() {
   const [modalDefaultStatus, setModalDefaultStatus] = useState<TaskStatus>('backlog');
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -24,20 +25,31 @@ export function KanbanBoard() {
   useEffect(() => {
     let unsubTasks: (() => void) | undefined;
     let unsubActivity: (() => void) | undefined;
+    let unsubErrors: (() => void) | undefined;
     
     async function init() {
-      await initializeStorage();
-      setTasks(getTasks());
-      setActivities(getActivity());
-      setIsLoaded(true);
-      
-      // Subscribe to real-time updates from other clients
-      unsubTasks = subscribeToTasks((newTasks) => {
-        if (!isSaving) setTasks(newTasks);
-      });
-      unsubActivity = subscribeToActivity((newActivity) => {
-        setActivities(newActivity);
-      });
+      try {
+        await initializeStorage();
+        setTasks(getTasks());
+        setActivities(getActivity());
+        setIsLoaded(true);
+        setError(null);
+        
+        // Subscribe to real-time updates
+        unsubTasks = subscribeToTasks((newTasks) => {
+          if (!isSaving) setTasks(newTasks);
+        });
+        unsubActivity = subscribeToActivity((newActivity) => {
+          setActivities(newActivity);
+        });
+        unsubErrors = subscribeToErrors((errorMsg) => {
+          setError(errorMsg);
+        });
+      } catch (err) {
+        console.error('Failed to initialize:', err);
+        setError(err instanceof Error ? err.message : 'Failed to connect to database');
+        setIsLoaded(true);
+      }
     }
     
     init();
@@ -45,16 +57,22 @@ export function KanbanBoard() {
     return () => {
       unsubTasks?.();
       unsubActivity?.();
+      unsubErrors?.();
     };
   }, []);
   
   // Save tasks to Firestore when they change
   useEffect(() => {
-    if (isLoaded && !isSaving) {
+    if (isLoaded && !isSaving && !error && tasks.length > 0) {
       setIsSaving(true);
-      saveTasks(tasks).finally(() => setIsSaving(false));
+      saveTasks(tasks)
+        .catch((err) => {
+          console.error('Failed to save:', err);
+          setError('Failed to save changes. Please refresh and try again.');
+        })
+        .finally(() => setIsSaving(false));
     }
-  }, [tasks, isLoaded]);
+  }, [tasks, isLoaded, error]);
 
   const handleDragStart = (event: DragStartEvent) => { const task = tasks.find((t) => t.id === event.active.id); if (task) setActiveTask(task); };
 
@@ -105,18 +123,70 @@ export function KanbanBoard() {
     }
   };
 
-  const logActivity = (action: string, taskTitle: string, details?: string) => { addActivity({ action, taskTitle, details }); setActivities(getActivity()); };
+  const logActivity = (action: string, taskTitle: string, details?: string) => { 
+    addActivity({ action, taskTitle, details }).catch(console.error); 
+    setActivities(getActivity()); 
+  };
+  
   const handleAddTask = (status: TaskStatus) => { setModalDefaultStatus(status); setIsModalOpen(true); };
+  
   const handleCreateTask = (taskData: { title: string; description: string; status: TaskStatus; priority: 'low' | 'medium' | 'high'; tags: string[] }) => {
     const newTask: Task = { id: crypto.randomUUID(), ...taskData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     setTasks((prev) => [...prev, newTask]);
     logActivity('Created', newTask.title);
   };
+  
   const handleDeleteTask = (id: string) => { const task = tasks.find((t) => t.id === id); if (task) { setTasks((prev) => prev.filter((t) => t.id !== id)); logActivity('Deleted', task.title); } };
-  const handleClearActivity = () => { clearActivity(); setActivities([]); };
+  const handleClearActivity = () => { clearActivity().catch(console.error); setActivities([]); };
   const getTasksByStatus = (status: TaskStatus) => tasks.filter((t) => t.status === status);
+  
+  const handleRetry = () => {
+    setError(null);
+    setIsLoaded(false);
+    window.location.reload();
+  };
 
-  if (!isLoaded) return <div className="flex items-center justify-center h-screen bg-zinc-950"><div className="text-zinc-500">Loading...</div></div>;
+  // Loading state
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-zinc-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500"></div>
+          <div className="text-zinc-500">Connecting to database...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-zinc-950">
+        <div className="bg-zinc-900 border border-red-500/30 rounded-lg p-8 max-w-md mx-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-zinc-100">Connection Error</h2>
+          </div>
+          <p className="text-zinc-400 mb-6">{error}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleRetry}
+              className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
+            >
+              Retry Connection
+            </button>
+          </div>
+          <p className="text-zinc-600 text-sm mt-4 text-center">
+            If this persists, check your internet connection or contact support.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-zinc-950">
@@ -144,6 +214,12 @@ export function KanbanBoard() {
             </DragOverlay>
           </DndContext>
         </main>
+        {isSaving && (
+          <div className="fixed bottom-4 right-4 bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+            <div className="animate-spin rounded-full h-3 w-3 border-t border-b border-purple-500"></div>
+            Saving...
+          </div>
+        )}
       </div>
       <ActivityLog activities={activities} onClear={handleClearActivity} />
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />

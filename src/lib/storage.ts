@@ -19,20 +19,16 @@ const TASKS_DOC = 'tasks';
 const BOARD_COLLECTION = 'boards';
 const ACTIVITY_COLLECTION = 'activity';
 
-const defaultTasks: Task[] = [
-  { id: '1', title: 'Build Kanban Dashboard', description: 'Visual dashboard for tracking tasks', status: 'done', priority: 'high', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), tags: ['iris'] },
-  { id: '2', title: 'Test PetListings.com', description: 'Create account, make listing, find bugs', status: 'backlog', priority: 'medium', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), tags: ['petlistings'] },
-  { id: '3', title: 'Review MFV codebase', description: 'Understand architecture', status: 'in-progress', priority: 'high', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), tags: ['mfv'] },
-];
-
 // In-memory cache for synchronous reads
-let tasksCache: Task[] = defaultTasks;
+let tasksCache: Task[] = [];
 let activityCache: ActivityItem[] = [];
 let isInitialized = false;
+let initError: Error | null = null;
 
 // Initialize and subscribe to Firestore
 export async function initializeStorage(): Promise<void> {
-  if (typeof window === 'undefined' || isInitialized) return;
+  if (typeof window === 'undefined') return;
+  if (isInitialized) return;
   
   try {
     // Load initial tasks
@@ -40,11 +36,10 @@ export async function initializeStorage(): Promise<void> {
     const tasksSnap = await getDoc(tasksRef);
     
     if (tasksSnap.exists()) {
-      tasksCache = tasksSnap.data().tasks || defaultTasks;
+      tasksCache = tasksSnap.data().tasks || [];
     } else {
-      // Initialize with defaults
-      await setDoc(tasksRef, { tasks: defaultTasks, updatedAt: Timestamp.now() });
-      tasksCache = defaultTasks;
+      // No data yet - start with empty board
+      tasksCache = [];
     }
     
     // Load initial activity
@@ -60,10 +55,12 @@ export async function initializeStorage(): Promise<void> {
     // Subscribe to real-time updates for tasks
     onSnapshot(tasksRef, (snap) => {
       if (snap.exists()) {
-        tasksCache = snap.data().tasks || defaultTasks;
-        // Dispatch custom event for components to react
+        tasksCache = snap.data().tasks || [];
         window.dispatchEvent(new CustomEvent('tasksUpdated', { detail: tasksCache }));
       }
+    }, (error) => {
+      console.error('Firestore tasks subscription error:', error);
+      window.dispatchEvent(new CustomEvent('storageError', { detail: error.message }));
     });
     
     // Subscribe to real-time updates for activity
@@ -74,15 +71,25 @@ export async function initializeStorage(): Promise<void> {
         timestamp: doc.data().timestamp?.toDate?.()?.toISOString() || new Date().toISOString()
       })) as ActivityItem[];
       window.dispatchEvent(new CustomEvent('activityUpdated', { detail: activityCache }));
+    }, (error) => {
+      console.error('Firestore activity subscription error:', error);
     });
     
     isInitialized = true;
+    initError = null;
   } catch (error) {
     console.error('Failed to initialize Firestore storage:', error);
-    // Fall back to defaults
-    tasksCache = defaultTasks;
-    activityCache = [];
+    initError = error instanceof Error ? error : new Error('Failed to connect to database');
+    throw initError;
   }
+}
+
+export function getInitError(): Error | null {
+  return initError;
+}
+
+export function isStorageInitialized(): boolean {
+  return isInitialized;
 }
 
 export function getTasks(): Task[] {
@@ -94,12 +101,8 @@ export async function saveTasks(tasks: Task[]): Promise<void> {
   
   if (typeof window === 'undefined') return;
   
-  try {
-    const tasksRef = doc(db, BOARD_COLLECTION, TASKS_DOC);
-    await setDoc(tasksRef, { tasks, updatedAt: Timestamp.now() });
-  } catch (error) {
-    console.error('Failed to save tasks to Firestore:', error);
-  }
+  const tasksRef = doc(db, BOARD_COLLECTION, TASKS_DOC);
+  await setDoc(tasksRef, { tasks, updatedAt: Timestamp.now() });
 }
 
 export function getActivity(): ActivityItem[] {
@@ -113,20 +116,15 @@ export async function addActivity(item: Omit<ActivityItem, 'id' | 'timestamp'>):
     timestamp: new Date().toISOString() 
   };
   
-  // Update cache immediately
   activityCache = [newItem, ...activityCache].slice(0, 50);
   
   if (typeof window === 'undefined') return;
   
-  try {
-    const activityRef = collection(db, ACTIVITY_COLLECTION);
-    await addDoc(activityRef, {
-      ...item,
-      timestamp: Timestamp.now()
-    });
-  } catch (error) {
-    console.error('Failed to add activity to Firestore:', error);
-  }
+  const activityRef = collection(db, ACTIVITY_COLLECTION);
+  await addDoc(activityRef, {
+    ...item,
+    timestamp: Timestamp.now()
+  });
 }
 
 export async function clearActivity(): Promise<void> {
@@ -134,17 +132,12 @@ export async function clearActivity(): Promise<void> {
   
   if (typeof window === 'undefined') return;
   
-  try {
-    const activityRef = collection(db, ACTIVITY_COLLECTION);
-    const activityQuery = query(activityRef);
-    const snap = await getDocs(activityQuery);
-    
-    // Delete all activity documents
-    const deletePromises = snap.docs.map(doc => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
-  } catch (error) {
-    console.error('Failed to clear activity from Firestore:', error);
-  }
+  const activityRef = collection(db, ACTIVITY_COLLECTION);
+  const activityQuery = query(activityRef);
+  const snap = await getDocs(activityQuery);
+  
+  const deletePromises = snap.docs.map(doc => deleteDoc(doc.ref));
+  await Promise.all(deletePromises);
 }
 
 // Hook for components to subscribe to updates
@@ -158,4 +151,10 @@ export function subscribeToActivity(callback: (activity: ActivityItem[]) => void
   const handler = (event: CustomEvent) => callback(event.detail);
   window.addEventListener('activityUpdated', handler as EventListener);
   return () => window.removeEventListener('activityUpdated', handler as EventListener);
+}
+
+export function subscribeToErrors(callback: (error: string) => void): () => void {
+  const handler = (event: CustomEvent) => callback(event.detail);
+  window.addEventListener('storageError', handler as EventListener);
+  return () => window.removeEventListener('storageError', handler as EventListener);
 }

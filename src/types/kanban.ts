@@ -1,35 +1,28 @@
-export type TaskStatus = 'backlog' | 'in-progress' | 'review' | 'done';
-
-export type TaskPriority = 'low' | 'medium' | 'high';
-
-export interface Task {
+﻿export interface Task {
   id: string;
   title: string;
   description?: string;
-  status: TaskStatus;
-  priority: TaskPriority;
+  priority: 'low' | 'medium' | 'high';
   createdAt: string;
   updatedAt: string;
-  tags?: string[];
 }
 
 export interface Column {
-  id: TaskStatus;
+  id: string;
   title: string;
-  icon: string;
+  tasks: Task[];
 }
 
 export interface ActivityItem {
   id: string;
   action: string;
   taskTitle: string;
+  from?: string;
+  to?: string;
   timestamp: string;
-  details?: string;
 }
 
-export const COLUMNS: Column[] = [
-  { id: 'backlog', title: 'Backlog', icon: '📋' },
-  { id: 'in-progress', title: 'In Progress', icon: '🏃' },
-  { id: 'review', title: 'Review', icon: '👀' },
-  { id: 'done', title: 'Done', icon: '✅' },
-];
+export interface KanbanState {
+  columns: Column[];
+  activity: ActivityItem[];
+}

@@ -1,230 +1,83 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverEvent,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragOverlay,
-  closestCorners,
-} from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, closestCorners } from '@dnd-kit/core';
 import { KanbanState, Task, Column } from '@/types/kanban';
 import { loadState, saveState, createTask, createActivity } from '@/lib/kanban-store';
-import { KanbanColumn } from './KanbanColumn';
-import { KanbanCard } from './KanbanCard';
-import { ActivityLog } from './ActivityLog';
-import { AddTaskModal } from './AddTaskModal';
 
 export function KanbanBoard() {
   const [state, setState] = useState<KanbanState | null>(null);
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [targetColumn, setTargetColumn] = useState<string>('backlog');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  useEffect(() => {
-    setState(loadState());
-  }, []);
+  useEffect(() => { setState(loadState()); }, []);
+  useEffect(() => { if (state) saveState(state); }, [state]);
 
-  useEffect(() => {
-    if (state) {
-      saveState(state);
-    }
-  }, [state]);
-
-  if (!state) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-[var(--muted)]">Loading...</div>
-      </div>
-    );
-  }
-
-  const findColumn = (taskId: string): Column | undefined => {
-    return state.columns.find((col) => col.tasks.some((t) => t.id === taskId));
-  };
-
-  const findTask = (taskId: string): Task | undefined => {
-    for (const col of state.columns) {
-      const task = col.tasks.find((t) => t.id === taskId);
-      if (task) return task;
-    }
-    return undefined;
-  };
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const task = findTask(event.active.id as string);
-    setActiveTask(task || null);
-  };
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    const activeColumn = findColumn(activeId);
-    const overColumn = state.columns.find((col) => col.id === overId) || findColumn(overId);
-
-    if (!activeColumn || !overColumn || activeColumn.id === overColumn.id) return;
-
-    setState((prev) => {
-      if (!prev) return prev;
-
-      const activeColIndex = prev.columns.findIndex((c) => c.id === activeColumn.id);
-      const overColIndex = prev.columns.findIndex((c) => c.id === overColumn.id);
-      const activeTaskIndex = prev.columns[activeColIndex].tasks.findIndex((t) => t.id === activeId);
-      const task = prev.columns[activeColIndex].tasks[activeTaskIndex];
-
-      const newColumns = [...prev.columns];
-      newColumns[activeColIndex] = {
-        ...newColumns[activeColIndex],
-        tasks: newColumns[activeColIndex].tasks.filter((t) => t.id !== activeId),
-      };
-      newColumns[overColIndex] = {
-        ...newColumns[overColIndex],
-        tasks: [...newColumns[overColIndex].tasks, task],
-      };
-
-      return { ...prev, columns: newColumns };
-    });
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveTask(null);
-
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    const activeColumn = findColumn(activeId);
-    const overColumn = state.columns.find((col) => col.id === overId) || findColumn(overId);
-
-    if (!activeColumn || !overColumn) return;
-
-    if (activeColumn.id === overColumn.id) {
-      const colIndex = state.columns.findIndex((c) => c.id === activeColumn.id);
-      const oldIndex = state.columns[colIndex].tasks.findIndex((t) => t.id === activeId);
-      const newIndex = state.columns[colIndex].tasks.findIndex((t) => t.id === overId);
-
-      if (oldIndex !== newIndex && newIndex !== -1) {
-        setState((prev) => {
-          if (!prev) return prev;
-          const newColumns = [...prev.columns];
-          newColumns[colIndex] = {
-            ...newColumns[colIndex],
-            tasks: arrayMove(newColumns[colIndex].tasks, oldIndex, newIndex),
-          };
-          return { ...prev, columns: newColumns };
-        });
-      }
-    }
-
-    // Log activity if column changed
-    const task = findTask(activeId);
-    if (task && activeColumn.id !== overColumn.id) {
-      const activity = createActivity('moved', task.title, activeColumn.title, overColumn.title);
-      setState((prev) => {
-        if (!prev) return prev;
-        return { ...prev, activity: [activity, ...prev.activity].slice(0, 100) };
-      });
-    }
-  };
+  if (!state) return <div className="text-gray-500">Loading...</div>;
 
   const handleAddTask = (columnId: string) => {
-    setTargetColumn(columnId);
-    setModalOpen(true);
-  };
-
-  const handleCreateTask = (title: string, description: string, priority: Task['priority']) => {
-    const task = createTask(title, description, priority);
-    const activity = createActivity('created', title);
-    
-    setState((prev) => {
+    if (!newTaskTitle.trim()) return;
+    const task = createTask(newTaskTitle);
+    const activity = createActivity('created', newTaskTitle);
+    setState(prev => {
       if (!prev) return prev;
-      const colIndex = prev.columns.findIndex((c) => c.id === targetColumn);
+      const colIndex = prev.columns.findIndex(c => c.id === columnId);
       const newColumns = [...prev.columns];
-      newColumns[colIndex] = {
-        ...newColumns[colIndex],
-        tasks: [task, ...newColumns[colIndex].tasks],
-      };
-      return {
-        columns: newColumns,
-        activity: [activity, ...prev.activity].slice(0, 100),
-      };
+      newColumns[colIndex] = { ...newColumns[colIndex], tasks: [task, ...newColumns[colIndex].tasks] };
+      return { columns: newColumns, activity: [activity, ...prev.activity].slice(0, 100) };
     });
+    setNewTaskTitle('');
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    const task = findTask(taskId);
-    if (!task) return;
-
-    const activity = createActivity('deleted', task.title);
-    
-    setState((prev) => {
+  const handleDeleteTask = (taskId: string, taskTitle: string) => {
+    const activity = createActivity('deleted', taskTitle);
+    setState(prev => {
       if (!prev) return prev;
-      const newColumns = prev.columns.map((col) => ({
-        ...col,
-        tasks: col.tasks.filter((t) => t.id !== taskId),
-      }));
-      return {
-        columns: newColumns,
-        activity: [activity, ...prev.activity].slice(0, 100),
-      };
+      const newColumns = prev.columns.map(col => ({ ...col, tasks: col.tasks.filter(t => t.id !== taskId) }));
+      return { columns: newColumns, activity: [activity, ...prev.activity].slice(0, 100) };
     });
   };
 
   return (
-    <>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex gap-6 min-h-[calc(100vh-120px)]">
-          <div className="flex gap-4 flex-1 overflow-x-auto pb-4">
-            {state.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                onAddTask={handleAddTask}
-                onDeleteTask={handleDeleteTask}
+    <DndContext sensors={sensors} collisionDetection={closestCorners}>
+      <div className="flex gap-4">
+        {state.columns.map(column => (
+          <div key={column.id} className="w-72 bg-zinc-900 rounded-lg p-4">
+            <h2 className="font-bold text-white mb-3">{column.title} ({column.tasks.length})</h2>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={newTaskTitle}
+                onChange={e => setNewTaskTitle(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddTask(column.id)}
+                placeholder="New task..."
+                className="flex-1 px-2 py-1 bg-zinc-800 rounded text-sm text-white"
               />
+              <button onClick={() => handleAddTask(column.id)} className="px-2 py-1 bg-green-600 rounded text-sm text-white">+</button>
+            </div>
+            <div className="space-y-2">
+              {column.tasks.map(task => (
+                <div key={task.id} className="bg-zinc-800 p-3 rounded group">
+                  <div className="flex justify-between items-start">
+                    <span className="text-white text-sm">{task.title}</span>
+                    <button onClick={() => handleDeleteTask(task.id, task.title)} className="text-red-400 text-xs opacity-0 group-hover:opacity-100">x</button>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded ${task.priority === 'high' ? 'bg-red-500/30 text-red-400' : task.priority === 'medium' ? 'bg-yellow-500/30 text-yellow-400' : 'bg-blue-500/30 text-blue-400'}`}>{task.priority}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="w-72 bg-zinc-900/50 rounded-lg p-4">
+          <h2 className="font-bold text-white mb-3">Activity</h2>
+          <div className="space-y-2 text-xs text-gray-400">
+            {state.activity.slice(0, 20).map(a => (
+              <div key={a.id}>{a.taskTitle} {a.action}</div>
             ))}
           </div>
-          
-          <ActivityLog activities={state.activity} />
         </div>
-
-        <DragOverlay>
-          {activeTask && (
-            <div className="rotate-3 opacity-90">
-              <KanbanCard task={activeTask} onDelete={() => {}} />
-            </div>
-          )}
-        </DragOverlay>
-      </DndContext>
-
-      <AddTaskModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onAdd={handleCreateTask}
-      />
-    </>
+      </div>
+    </DndContext>
   );
 }

@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Iris Dashboard",
-  description: "Kanban board and activity tracker for Iris",
+  description: "Task tracking & activity dashboard for Iris",
 };
 
 export default function RootLayout({

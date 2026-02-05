@@ -35,22 +35,22 @@ export function KanbanCard({ task, onDelete, isOverlay = false }: KanbanCardProp
     <div
       ref={setNodeRef}
       style={style}
-      className={`group relative rounded-xl border border-zinc-800 bg-zinc-900/80 p-3 shadow-sm transition ${
+      className={`group relative rounded-xl border border-zinc-800 bg-zinc-900/80 p-2.5 sm:p-3 shadow-sm transition touch-manipulation ${
         isDragging ? 'opacity-60' : 'opacity-100'
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="flex items-start gap-1.5 sm:gap-2 min-w-0 flex-1">
           <button
             type="button"
-            className="text-zinc-500 hover:text-zinc-300 mt-0.5"
+            className="text-zinc-500 hover:text-zinc-300 mt-0.5 touch-manipulation shrink-0"
             aria-label="Drag task"
             {...dragHandleProps}
           >
             <GripVertical className="h-4 w-4" />
           </button>
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-100">{task.title}</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-xs sm:text-sm font-semibold text-zinc-100 break-words">{task.title}</h3>
             {task.description ? (
               <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{task.description}</p>
             ) : null}
@@ -60,7 +60,7 @@ export function KanbanCard({ task, onDelete, isOverlay = false }: KanbanCardProp
           <button
             type="button"
             onClick={onDelete}
-            className="opacity-0 group-hover:opacity-100 transition text-zinc-500 hover:text-red-400"
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition text-zinc-500 hover:text-red-400 p-1 -mr-1 shrink-0"
             aria-label={`Delete ${task.title}`}
           >
             <Trash2 className="h-4 w-4" />
@@ -68,21 +68,26 @@ export function KanbanCard({ task, onDelete, isOverlay = false }: KanbanCardProp
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs">
+      <div className="mt-2 sm:mt-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs shrink-0">
           <span className={`h-2 w-2 rounded-full ${priority.dot}`} />
           <span className={`${priority.text} capitalize`}>{task.priority}</span>
         </div>
         {task.tags && task.tags.length > 0 ? (
-          <div className="flex flex-wrap gap-1 justify-end">
-            {task.tags.map((tag) => (
+          <div className="flex flex-wrap gap-1 justify-end min-w-0">
+            {task.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300"
+                className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 truncate max-w-[60px] sm:max-w-none"
               >
                 {tag}
               </span>
             ))}
+            {task.tags.length > 2 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-500">
+                +{task.tags.length - 2}
+              </span>
+            )}
           </div>
         ) : null}
       </div>

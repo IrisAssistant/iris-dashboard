@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { DndContext, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
+import { useState, useEffect } from 'react';
+import { DndContext, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, TouchSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Task, TaskStatus, COLUMNS, ActivityItem } from '@/types/kanban';
 import { getTasks, saveTasks, getActivity, addActivity, clearActivity, initializeStorage, subscribeToTasks, subscribeToActivity, subscribeToErrors } from '@/lib/storage';
@@ -19,9 +19,12 @@ export function KanbanBoard() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  // Support both mouse and touch
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
 
-  // Initialize Firestore and subscribe to updates
   useEffect(() => {
     let unsubTasks: (() => void) | undefined;
     let unsubActivity: (() => void) | undefined;
@@ -35,7 +38,6 @@ export function KanbanBoard() {
         setIsLoaded(true);
         setError(null);
         
-        // Subscribe to real-time updates
         unsubTasks = subscribeToTasks((newTasks) => {
           if (!isSaving) setTasks(newTasks);
         });
@@ -61,7 +63,6 @@ export function KanbanBoard() {
     };
   }, []);
   
-  // Save tasks to Firestore when they change
   useEffect(() => {
     if (isLoaded && !isSaving && !error && tasks.length > 0) {
       setIsSaving(true);
@@ -74,7 +75,10 @@ export function KanbanBoard() {
     }
   }, [tasks, isLoaded, error]);
 
-  const handleDragStart = (event: DragStartEvent) => { const task = tasks.find((t) => t.id === event.active.id); if (task) setActiveTask(task); };
+  const handleDragStart = (event: DragStartEvent) => { 
+    const task = tasks.find((t) => t.id === event.active.id); 
+    if (task) setActiveTask(task); 
+  };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
@@ -136,7 +140,14 @@ export function KanbanBoard() {
     logActivity('Created', newTask.title);
   };
   
-  const handleDeleteTask = (id: string) => { const task = tasks.find((t) => t.id === id); if (task) { setTasks((prev) => prev.filter((t) => t.id !== id)); logActivity('Deleted', task.title); } };
+  const handleDeleteTask = (id: string) => { 
+    const task = tasks.find((t) => t.id === id); 
+    if (task) { 
+      setTasks((prev) => prev.filter((t) => t.id !== id)); 
+      logActivity('Deleted', task.title); 
+    } 
+  };
+  
   const handleClearActivity = () => { clearActivity().catch(console.error); setActivities([]); };
   const getTasksByStatus = (status: TaskStatus) => tasks.filter((t) => t.status === status);
   
@@ -146,7 +157,6 @@ export function KanbanBoard() {
     window.location.reload();
   };
 
-  // Loading state
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center h-screen bg-zinc-950">
@@ -158,30 +168,27 @@ export function KanbanBoard() {
     );
   }
 
-  // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-zinc-950">
-        <div className="bg-zinc-900 border border-red-500/30 rounded-lg p-8 max-w-md mx-4">
+      <div className="flex items-center justify-center h-screen bg-zinc-950 p-4">
+        <div className="bg-zinc-900 border border-red-500/30 rounded-lg p-6 sm:p-8 max-w-md w-full">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
               <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
             <h2 className="text-lg font-semibold text-zinc-100">Connection Error</h2>
           </div>
-          <p className="text-zinc-400 mb-6">{error}</p>
-          <div className="flex gap-3">
-            <button
-              onClick={handleRetry}
-              className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
-            >
-              Retry Connection
-            </button>
-          </div>
-          <p className="text-zinc-600 text-sm mt-4 text-center">
-            If this persists, check your internet connection or contact support.
+          <p className="text-zinc-400 mb-6 text-sm sm:text-base">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
+          >
+            Retry Connection
+          </button>
+          <p className="text-zinc-600 text-xs sm:text-sm mt-4 text-center">
+            If this persists, check your internet connection.
           </p>
         </div>
       </div>
@@ -191,19 +198,28 @@ export function KanbanBoard() {
   return (
     <div className="flex h-screen bg-zinc-950">
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="px-6 py-4 border-b border-zinc-800">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🔮</span>
+        <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-xl sm:text-2xl">🔮</span>
             <div>
-              <h1 className="text-xl font-bold text-zinc-100">Iris Dashboard</h1>
-              <p className="text-sm text-zinc-500">Kanban task tracking</p>
+              <h1 className="text-lg sm:text-xl font-bold text-zinc-100">Iris Dashboard</h1>
+              <p className="text-xs sm:text-sm text-zinc-500 hidden sm:block">Kanban task tracking</p>
             </div>
           </div>
         </header>
-        <main className="flex-1 overflow-x-auto p-6">
+        
+        <main className="flex-1 overflow-x-auto overflow-y-hidden p-3 sm:p-6">
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-            <div className="flex gap-4 h-full">
-              {COLUMNS.map((column) => (<KanbanColumn key={column.id} column={column} tasks={getTasksByStatus(column.id)} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} />))}
+            <div className="flex gap-3 sm:gap-4 h-full min-w-max pb-4">
+              {COLUMNS.map((column) => (
+                <KanbanColumn 
+                  key={column.id} 
+                  column={column} 
+                  tasks={getTasksByStatus(column.id)} 
+                  onAddTask={handleAddTask} 
+                  onDeleteTask={handleDeleteTask} 
+                />
+              ))}
             </div>
             <DragOverlay>
               {activeTask ? (
@@ -214,13 +230,15 @@ export function KanbanBoard() {
             </DragOverlay>
           </DndContext>
         </main>
+        
         {isSaving && (
-          <div className="fixed bottom-4 right-4 bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+          <div className="fixed bottom-4 left-4 bg-zinc-800 text-zinc-400 px-3 py-2 rounded-lg text-sm flex items-center gap-2 z-30">
             <div className="animate-spin rounded-full h-3 w-3 border-t border-b border-purple-500"></div>
             Saving...
           </div>
         )}
       </div>
+      
       <ActivityLog activities={activities} onClear={handleClearActivity} />
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />
     </div>

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DndContext, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, TouchSensor, useSensor, useSensors, closestCorners, DragOverlay } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Task, TaskStatus, COLUMNS, ActivityItem } from '@/types/kanban';
@@ -18,12 +18,30 @@ export function KanbanBoard() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Track if we need to save (only for LOCAL changes, not Firebase updates)
+  const needsSave = useRef(false);
+  const isReceivingUpdate = useRef(false);
 
-  // Support both mouse and touch
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
   );
+
+  // Save function that only runs when needed
+  const saveIfNeeded = useCallback(async (tasksToSave: Task[]) => {
+    if (!needsSave.current || isSaving) return;
+    needsSave.current = false;
+    setIsSaving(true);
+    try {
+      await saveTasks(tasksToSave);
+    } catch (err) {
+      console.error('Failed to save:', err);
+      setError('Failed to save changes. Please refresh and try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isSaving]);
 
   useEffect(() => {
     let unsubTasks: (() => void) | undefined;
@@ -38,8 +56,12 @@ export function KanbanBoard() {
         setIsLoaded(true);
         setError(null);
         
+        // Subscribe to Firebase updates (these should NOT trigger saves)
         unsubTasks = subscribeToTasks((newTasks) => {
-          if (!isSaving) setTasks(newTasks);
+          isReceivingUpdate.current = true;
+          setTasks(newTasks);
+          // Reset flag after state update
+          setTimeout(() => { isReceivingUpdate.current = false; }, 0);
         });
         unsubActivity = subscribeToActivity((newActivity) => {
           setActivities(newActivity);
@@ -63,17 +85,18 @@ export function KanbanBoard() {
     };
   }, []);
   
+  // Save when tasks change from LOCAL updates only
   useEffect(() => {
-    if (isLoaded && !isSaving && !error && tasks.length > 0) {
-      setIsSaving(true);
-      saveTasks(tasks)
-        .catch((err) => {
-          console.error('Failed to save:', err);
-          setError('Failed to save changes. Please refresh and try again.');
-        })
-        .finally(() => setIsSaving(false));
+    if (isLoaded && !error && needsSave.current) {
+      saveIfNeeded(tasks);
     }
-  }, [tasks, isLoaded, error]);
+  }, [tasks, isLoaded, error, saveIfNeeded]);
+
+  // Helper to update tasks locally (marks for save)
+  const updateTasksLocally = useCallback((updater: (prev: Task[]) => Task[]) => {
+    needsSave.current = true;
+    setTasks(updater);
+  }, []);
 
   const handleDragStart = (event: DragStartEvent) => { 
     const task = tasks.find((t) => t.id === event.active.id); 
@@ -83,16 +106,16 @@ export function KanbanBoard() {
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
-    const activeTask = tasks.find((t) => t.id === active.id);
-    if (!activeTask) return;
+    const activeTaskItem = tasks.find((t) => t.id === active.id);
+    if (!activeTaskItem) return;
     const overColumn = COLUMNS.find((c) => c.id === over.id);
-    if (overColumn && activeTask.status !== overColumn.id) {
-      setTasks((prev) => prev.map((t) => t.id === active.id ? { ...t, status: overColumn.id, updatedAt: new Date().toISOString() } : t));
+    if (overColumn && activeTaskItem.status !== overColumn.id) {
+      updateTasksLocally((prev) => prev.map((t) => t.id === active.id ? { ...t, status: overColumn.id, updatedAt: new Date().toISOString() } : t));
       return;
     }
     const overTask = tasks.find((t) => t.id === over.id);
-    if (overTask && activeTask.status !== overTask.status) {
-      setTasks((prev) => prev.map((t) => t.id === active.id ? { ...t, status: overTask.status, updatedAt: new Date().toISOString() } : t));
+    if (overTask && activeTaskItem.status !== overTask.status) {
+      updateTasksLocally((prev) => prev.map((t) => t.id === active.id ? { ...t, status: overTask.status, updatedAt: new Date().toISOString() } : t));
     }
   };
 
@@ -115,7 +138,7 @@ export function KanbanBoard() {
         const newIndex = columnTasks.findIndex((t) => t.id === over.id);
         if (oldIndex !== newIndex) {
           const reordered = arrayMove(columnTasks, oldIndex, newIndex);
-          setTasks((prev) => [...prev.filter((t) => t.status !== draggingTask.status), ...reordered]);
+          updateTasksLocally((prev) => [...prev.filter((t) => t.status !== draggingTask.status), ...reordered]);
         }
       } else {
         const fromColumn = COLUMNS.find((c) => c.id === draggingTask.status);
@@ -136,14 +159,14 @@ export function KanbanBoard() {
   
   const handleCreateTask = (taskData: { title: string; description: string; status: TaskStatus; priority: 'low' | 'medium' | 'high'; tags: string[] }) => {
     const newTask: Task = { id: crypto.randomUUID(), ...taskData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    setTasks((prev) => [...prev, newTask]);
+    updateTasksLocally((prev) => [...prev, newTask]);
     logActivity('Created', newTask.title);
   };
   
   const handleDeleteTask = (id: string) => { 
     const task = tasks.find((t) => t.id === id); 
     if (task) { 
-      setTasks((prev) => prev.filter((t) => t.id !== id)); 
+      updateTasksLocally((prev) => prev.filter((t) => t.id !== id)); 
       logActivity('Deleted', task.title); 
     } 
   };

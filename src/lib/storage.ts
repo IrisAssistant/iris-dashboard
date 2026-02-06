@@ -147,6 +147,27 @@ export function subscribeToTasks(callback: (tasks: Task[]) => void): () => void 
   return () => window.removeEventListener('tasksUpdated', handler as EventListener);
 }
 
+// Re-fetch on visibility change (fixes stale connection in background tabs)
+if (typeof window !== 'undefined') {
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && isInitialized) {
+      try {
+        const tasksRef = doc(db, BOARD_COLLECTION, TASKS_DOC);
+        const tasksSnap = await getDoc(tasksRef);
+        if (tasksSnap.exists()) {
+          const freshTasks = tasksSnap.data().tasks || [];
+          if (JSON.stringify(freshTasks) !== JSON.stringify(tasksCache)) {
+            tasksCache = freshTasks;
+            window.dispatchEvent(new CustomEvent('tasksUpdated', { detail: tasksCache }));
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to refresh tasks on visibility change:', e);
+      }
+    }
+  });
+}
+
 export function subscribeToActivity(callback: (activity: ActivityItem[]) => void): () => void {
   const handler = (event: CustomEvent) => callback(event.detail);
   window.addEventListener('activityUpdated', handler as EventListener);

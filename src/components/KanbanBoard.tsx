@@ -160,7 +160,7 @@ export function KanbanBoard() {
   
   const handleAddTask = (status: TaskStatus) => { setModalDefaultStatus(status); setIsModalOpen(true); };
   
-  const handleCreateTask = (taskData: { title: string; description: string; status: TaskStatus; priority: 'low' | 'medium' | 'high'; tags: string[] }) => {
+  const handleCreateTask = (taskData: { title: string; description: string; status: TaskStatus; priority: 'low' | 'medium' | 'high'; tags: string[]; link?: string }) => {
     const newTask: Task = { id: crypto.randomUUID(), ...taskData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     updateTasksLocally((prev) => [...prev, newTask]);
     logActivity('Created', newTask.title);
@@ -297,7 +297,15 @@ export function KanbanBoard() {
       
       {showActivity && <ActivityLog activities={activities} onClear={handleClearActivity} />}
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />
-      <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} />
+      <TaskDetailModal 
+        task={selectedTask} 
+        onClose={() => setSelectedTask(null)} 
+        onUpdate={(updatedTask) => {
+          updateTasksLocally((prev) => prev.map((t) => t.id === updatedTask.id ? updatedTask : t));
+          logActivity('Updated', updatedTask.title);
+          setSelectedTask(updatedTask);
+        }}
+      />
     </div>
   );
 }

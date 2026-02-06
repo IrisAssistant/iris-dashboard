@@ -2,6 +2,13 @@
 
 export type TaskPriority = 'low' | 'medium' | 'high';
 
+export interface TaskHistoryEntry {
+  timestamp: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -11,6 +18,8 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   tags?: string[];
+  link?: string;
+  history?: TaskHistoryEntry[];
 }
 
 export interface Column {

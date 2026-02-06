@@ -13,6 +13,7 @@ interface AddTaskModalProps {
     status: TaskStatus;
     priority: TaskPriority;
     tags: string[];
+    link?: string;
   }) => void;
   defaultStatus: TaskStatus;
 }
@@ -25,6 +26,7 @@ export function AddTaskModal({ isOpen, onClose, onAdd, defaultStatus }: AddTaskM
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [tags, setTags] = useState('');
+  const [link, setLink] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -33,6 +35,7 @@ export function AddTaskModal({ isOpen, onClose, onAdd, defaultStatus }: AddTaskM
       setDescription('');
       setPriority('medium');
       setTags('');
+      setLink('');
     }
   }, [isOpen, defaultStatus]);
 
@@ -57,7 +60,7 @@ export function AddTaskModal({ isOpen, onClose, onAdd, defaultStatus }: AddTaskM
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean);
-    onAdd({ title: title.trim(), description: description.trim(), status, priority, tags: tagList });
+    onAdd({ title: title.trim(), description: description.trim(), status, priority, tags: tagList, link: link.trim() || undefined });
     onClose();
   };
 
@@ -137,6 +140,17 @@ export function AddTaskModal({ isOpen, onClose, onAdd, defaultStatus }: AddTaskM
               onChange={(event) => setTags(event.target.value)}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5 sm:py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
               placeholder="comma-separated tags"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1.5">Link (optional)</label>
+            <input
+              type="url"
+              value={link}
+              onChange={(event) => setLink(event.target.value)}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2.5 sm:py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              placeholder="https://github.com/..."
             />
           </div>
 

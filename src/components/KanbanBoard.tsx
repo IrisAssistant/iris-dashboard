@@ -173,7 +173,15 @@ export function KanbanBoard() {
   };
   
   const handleClearActivity = () => { clearActivity().catch(console.error); setActivities([]); };
-  const getTasksByStatus = (status: TaskStatus) => tasks.filter((t) => t.status === status);
+  const getTasksByStatus = (status: TaskStatus) => {
+    const filtered = tasks.filter((t) => t.status === status);
+    // Done: newest on top (most recently completed first)
+    // Others: oldest on top (work oldest items first)
+    if (status === 'done') {
+      return filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+    return filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  };
   
   const handleRetry = () => {
     setError(null);

@@ -1,4 +1,4 @@
-﻿export type TaskStatus = 'backlog' | 'in-progress' | 'review' | 'done';
+﻿export type TaskStatus = 'backlog' | 'in-progress' | 'revision' | 'review' | 'done';
 
 export type TaskPriority = 'low' | 'medium' | 'high';
 
@@ -48,6 +48,7 @@ export interface KanbanState {
 export const COLUMNS: Column[] = [
   { id: 'backlog', title: 'Backlog', icon: 'B' },
   { id: 'in-progress', title: 'In Progress', icon: 'P' },
+  { id: 'revision', title: 'Revision', icon: '⟲' },
   { id: 'review', title: 'Review', icon: 'R' },
   { id: 'done', title: 'Done', icon: 'D' },
 ];

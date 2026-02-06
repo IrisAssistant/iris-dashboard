@@ -18,6 +18,7 @@ export function KanbanBoard() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showActivity, setShowActivity] = useState(false);
   
   // Track if we need to save (only for LOCAL changes, not Firebase updates)
   const needsSave = useRef(false);
@@ -222,12 +223,33 @@ export function KanbanBoard() {
     <div className="flex h-screen bg-zinc-950">
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-xl sm:text-2xl">🔮</span>
-            <div>
-              <h1 className="text-lg sm:text-xl font-bold text-zinc-100">Iris Dashboard</h1>
-              <p className="text-xs sm:text-sm text-zinc-500 hidden sm:block">Kanban task tracking</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-xl sm:text-2xl">🔮</span>
+              <div>
+                <h1 className="text-lg sm:text-xl font-bold text-zinc-100">Iris Dashboard</h1>
+                <p className="text-xs sm:text-sm text-zinc-500 hidden sm:block">Kanban task tracking</p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowActivity(!showActivity)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                showActivity 
+                  ? 'bg-purple-600 text-white' 
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+              }`}
+              title={showActivity ? 'Hide activity' : 'Show activity'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="hidden sm:inline">Activity</span>
+              {activities.length > 0 && !showActivity && (
+                <span className="bg-purple-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {activities.length > 9 ? '9+' : activities.length}
+                </span>
+              )}
+            </button>
           </div>
         </header>
         
@@ -262,7 +284,7 @@ export function KanbanBoard() {
         )}
       </div>
       
-      <ActivityLog activities={activities} onClear={handleClearActivity} />
+      {showActivity && <ActivityLog activities={activities} onClear={handleClearActivity} />}
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />
     </div>
   );

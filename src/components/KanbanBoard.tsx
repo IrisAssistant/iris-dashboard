@@ -8,6 +8,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { ActivityLog } from './ActivityLog';
 import { AddTaskModal } from './AddTaskModal';
+import { TaskDetailModal } from './TaskDetailModal';
 
 export function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -19,6 +20,7 @@ export function KanbanBoard() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showActivity, setShowActivity] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
   // Track if we need to save (only for LOCAL changes, not Firebase updates)
   const needsSave = useRef(false);
@@ -270,7 +272,8 @@ export function KanbanBoard() {
                   column={column} 
                   tasks={getTasksByStatus(column.id)} 
                   onAddTask={handleAddTask} 
-                  onDeleteTask={handleDeleteTask} 
+                  onDeleteTask={handleDeleteTask}
+                  onClickTask={setSelectedTask}
                 />
               ))}
             </div>
@@ -294,6 +297,7 @@ export function KanbanBoard() {
       
       {showActivity && <ActivityLog activities={activities} onClear={handleClearActivity} />}
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />
+      <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} />
     </div>
   );
 }

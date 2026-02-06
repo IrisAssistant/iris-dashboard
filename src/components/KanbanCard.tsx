@@ -8,6 +8,7 @@ import { Task } from '@/types/kanban';
 interface KanbanCardProps {
   task: Task;
   onDelete: () => void;
+  onClick?: () => void;
   isOverlay?: boolean;
 }
 
@@ -17,7 +18,7 @@ const priorityStyles: Record<Task['priority'], { dot: string; text: string }> = 
   low: { dot: 'bg-emerald-500', text: 'text-emerald-400' },
 };
 
-export function KanbanCard({ task, onDelete, isOverlay = false }: KanbanCardProps) {
+export function KanbanCard({ task, onDelete, onClick, isOverlay = false }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: isOverlay,
@@ -49,8 +50,11 @@ export function KanbanCard({ task, onDelete, isOverlay = false }: KanbanCardProp
           >
             <GripVertical className="h-4 w-4" />
           </button>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-xs sm:text-sm font-semibold text-zinc-100 break-words">{task.title}</h3>
+          <div 
+            className="min-w-0 flex-1 cursor-pointer"
+            onClick={onClick}
+          >
+            <h3 className="text-xs sm:text-sm font-semibold text-zinc-100 break-words hover:text-purple-300 transition">{task.title}</h3>
             {task.description ? (
               <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{task.description}</p>
             ) : null}

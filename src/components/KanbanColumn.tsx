@@ -11,9 +11,10 @@ interface KanbanColumnProps {
   tasks: Task[];
   onAddTask: (status: TaskStatus) => void;
   onDeleteTask: (id: string) => void;
+  onClickTask: (task: Task) => void;
 }
 
-export function KanbanColumn({ column, tasks, onAddTask, onDeleteTask }: KanbanColumnProps) {
+export function KanbanColumn({ column, tasks, onAddTask, onDeleteTask, onClickTask }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
@@ -44,7 +45,7 @@ export function KanbanColumn({ column, tasks, onAddTask, onDeleteTask }: KanbanC
             </div>
           ) : (
             tasks.map((task) => (
-              <KanbanCard key={task.id} task={task} onDelete={() => onDeleteTask(task.id)} />
+              <KanbanCard key={task.id} task={task} onDelete={() => onDeleteTask(task.id)} onClick={() => onClickTask(task)} />
             ))
           )}
         </SortableContext>

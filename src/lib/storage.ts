@@ -102,7 +102,35 @@ export async function saveTasks(tasks: Task[]): Promise<void> {
   if (typeof window === 'undefined') return;
   
   const tasksRef = doc(db, BOARD_COLLECTION, TASKS_DOC);
-  await setDoc(tasksRef, { tasks, updatedAt: Timestamp.now() });
+  
+  // Retry logic with exponential backoff
+  let retries = 3;
+  let lastError: Error | null = null;
+  
+  while (retries > 0) {
+    try {
+      await setDoc(tasksRef, { tasks, updatedAt: Timestamp.now() });
+      return; // Success
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      retries--;
+      
+      // Log the error and retry
+      console.warn(`Firestore write failed (retries left: ${retries}):`, lastError.message);
+      
+      if (retries > 0) {
+        // Exponential backoff: 500ms, 1000ms, 2000ms
+        await new Promise(resolve => setTimeout(resolve, 500 * (4 - retries)));
+      }
+    }
+  }
+  
+  // All retries failed
+  console.error('Failed to save tasks after 3 retries:', lastError);
+  window.dispatchEvent(new CustomEvent('storageError', { 
+    detail: `Failed to save tasks: ${lastError?.message}` 
+  }));
+  throw lastError || new Error('Failed to save tasks to Firestore');
 }
 
 export function getActivity(): ActivityItem[] {
@@ -121,10 +149,32 @@ export async function addActivity(item: Omit<ActivityItem, 'id' | 'timestamp'>):
   if (typeof window === 'undefined') return;
   
   const activityRef = collection(db, ACTIVITY_COLLECTION);
-  await addDoc(activityRef, {
-    ...item,
-    timestamp: Timestamp.now()
-  });
+  
+  // Retry logic with exponential backoff
+  let retries = 3;
+  let lastError: Error | null = null;
+  
+  while (retries > 0) {
+    try {
+      await addDoc(activityRef, {
+        ...item,
+        timestamp: Timestamp.now()
+      });
+      return; // Success
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      retries--;
+      
+      console.warn(`Firestore activity write failed (retries left: ${retries}):`, lastError.message);
+      
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500 * (4 - retries)));
+      }
+    }
+  }
+  
+  // Log error but don't crash - activity is secondary
+  console.error('Failed to save activity after 3 retries:', lastError);
 }
 
 export async function clearActivity(): Promise<void> {

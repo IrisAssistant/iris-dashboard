@@ -18,7 +18,7 @@ export function KanbanColumn({ column, tasks, onAddTask, onDeleteTask, onClickTa
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
-    <div className="flex flex-col w-64 sm:w-72 shrink-0 rounded-xl bg-zinc-900/60 border border-zinc-800">
+    <div className="flex flex-col w-full sm:w-64 md:w-64 lg:w-72 shrink-0 rounded-xl bg-zinc-900/60 border border-zinc-800">
       <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{column.title}</span>

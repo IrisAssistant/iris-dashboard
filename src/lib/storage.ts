@@ -103,13 +103,20 @@ export async function saveTasks(tasks: Task[]): Promise<void> {
   
   const tasksRef = doc(db, BOARD_COLLECTION, TASKS_DOC);
   
+  // Filter out undefined values from tasks before saving to Firestore
+  const cleanedTasks = tasks.map(task => 
+    Object.fromEntries(
+      Object.entries(task).filter(([, value]) => value !== undefined)
+    )
+  ) as Task[];
+  
   // Retry logic with exponential backoff
   let retries = 3;
   let lastError: Error | null = null;
   
   while (retries > 0) {
     try {
-      await setDoc(tasksRef, { tasks, updatedAt: Timestamp.now() });
+      await setDoc(tasksRef, { tasks: cleanedTasks, updatedAt: Timestamp.now() });
       return; // Success
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -150,6 +157,11 @@ export async function addActivity(item: Omit<ActivityItem, 'id' | 'timestamp'>):
   
   const activityRef = collection(db, ACTIVITY_COLLECTION);
   
+  // Filter out undefined values before saving to Firestore (Firestore doesn't allow undefined)
+  const cleanedItem = Object.fromEntries(
+    Object.entries(item).filter(([, value]) => value !== undefined)
+  );
+  
   // Retry logic with exponential backoff
   let retries = 3;
   let lastError: Error | null = null;
@@ -157,7 +169,7 @@ export async function addActivity(item: Omit<ActivityItem, 'id' | 'timestamp'>):
   while (retries > 0) {
     try {
       await addDoc(activityRef, {
-        ...item,
+        ...cleanedItem,
         timestamp: Timestamp.now()
       });
       return; // Success

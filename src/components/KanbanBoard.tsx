@@ -295,7 +295,7 @@ export function KanbanBoard() {
         )}
       </div>
       
-      {showActivity && <ActivityLog activities={activities} onClear={handleClearActivity} />}
+      {showActivity && <ActivityLog activities={activities} onClear={handleClearActivity} isOpen={showActivity} onToggle={setShowActivity} />}
       <AddTaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleCreateTask} defaultStatus={modalDefaultStatus} />
       <TaskDetailModal 
         task={selectedTask} 

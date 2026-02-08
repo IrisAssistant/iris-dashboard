@@ -7,6 +7,8 @@ import { ActivityItem } from '@/types/kanban';
 interface ActivityLogProps {
   activities: ActivityItem[];
   onClear: () => void;
+  isOpen: boolean;
+  onToggle: (open: boolean) => void;
 }
 
 function formatRelativeTime(timestamp: string): string {
@@ -21,14 +23,13 @@ function formatRelativeTime(timestamp: string): string {
   return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function ActivityLog({ activities, onClear }: ActivityLogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function ActivityLog({ activities, onClear, isOpen, onToggle }: ActivityLogProps) {
 
   return (
     <>
-      {/* Mobile toggle button */}
+      {/* Mobile toggle button - Always rendered, always accessible */}
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => onToggle(true)}
         className="lg:hidden fixed bottom-4 right-4 z-40 bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-full shadow-lg transition-colors"
         aria-label="Open activity log"
       >
@@ -40,11 +41,11 @@ export function ActivityLog({ activities, onClear }: ActivityLogProps) {
         )}
       </button>
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay - Closes when clicked */}
       {isOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setIsOpen(false)}
+          onClick={() => onToggle(false)}
         />
       )}
 
@@ -67,7 +68,7 @@ export function ActivityLog({ activities, onClear }: ActivityLogProps) {
               Clear
             </button>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={() => onToggle(false)}
               className="lg:hidden text-zinc-500 hover:text-zinc-200 p-1"
               aria-label="Close activity log"
             >

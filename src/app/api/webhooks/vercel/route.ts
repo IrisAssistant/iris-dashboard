@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac } from 'crypto';
 import { addActivity } from '@/lib/storage';
 
 /**
@@ -8,9 +9,30 @@ import { addActivity } from '@/lib/storage';
  * Events: deployment.created, deployment.succeeded, deployment.failed, deployment.canceled
  */
 
+function verifyVercelSignature(body: Buffer, signature: string): boolean {
+  const secret = process.env.VERCEL_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn('VERCEL_WEBHOOK_SECRET not configured');
+    return false;
+  }
+
+  const hash = createHmac('sha256', secret).update(body).digest('base64');
+  return hash === signature;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    // Get the raw body for signature verification
+    const rawBody = await request.arrayBuffer();
+    const signature = request.headers.get('x-vercel-signature');
+
+    // Verify the signature
+    if (!verifyVercelSignature(Buffer.from(rawBody), signature || '')) {
+      console.error('Invalid Vercel webhook signature');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = JSON.parse(Buffer.from(rawBody).toString());
     const { type, deployment } = body;
 
     if (!deployment) {

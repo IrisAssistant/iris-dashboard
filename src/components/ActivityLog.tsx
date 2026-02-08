@@ -49,12 +49,23 @@ export function ActivityLog({ activities, onClear, isOpen, onToggle }: ActivityL
         />
       )}
 
-      {/* Activity panel */}
+      {/* Activity panel - Bottom sheet on mobile, sidebar on desktop */}
       <aside className={`
-        fixed lg:relative inset-y-0 right-0 z-50
-        w-80 max-w-[85vw] border-l border-zinc-800 bg-zinc-950 px-4 py-5
+        fixed lg:relative z-50
+        bg-zinc-950 border-zinc-800 px-4 py-5
         transform transition-transform duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+        
+        /* Mobile: Bottom sheet */
+        lg:hidden
+        bottom-0 left-0 right-0
+        max-h-[70vh] rounded-t-2xl border-t
+        ${isOpen ? 'translate-y-0' : 'translate-y-full'}
+        
+        /* Desktop: Right sidebar */
+        lg:inset-y-0 lg:right-0
+        lg:w-80 lg:max-w-[85vw] lg:border-l lg:border-t-0 lg:rounded-none
+        lg:translate-x-0 lg:translate-y-0
+        lg:max-h-full
       `}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-zinc-200">Activity</h2>
@@ -82,16 +93,16 @@ export function ActivityLog({ activities, onClear, isOpen, onToggle }: ActivityL
             No activity yet
           </div>
         ) : (
-          <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-100px)]">
+          <div className="space-y-3 overflow-y-auto max-h-[calc(70vh-120px)] lg:max-h-[calc(100vh-100px)]">
             {activities.map((item) => (
-              <div key={item.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
-                <div className="flex items-start justify-between gap-2">
+              <div key={item.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 activity-item">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-zinc-200">
-                      {item.action} <span className="font-semibold truncate">{item.taskTitle}</span>
+                    <p className="text-sm sm:text-sm text-zinc-200 break-words">
+                      {item.action} <span className="font-semibold">{item.taskTitle}</span>
                     </p>
                     {item.details ? (
-                      <p className="text-xs text-zinc-500 mt-1 truncate">{item.details}</p>
+                      <p className="text-xs text-zinc-500 mt-1 break-words">{item.details}</p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-zinc-500 shrink-0">
